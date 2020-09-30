@@ -9,6 +9,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 import config
+import addr_check_helper
 
 bot = Bot(token=config.bot_token)
 memory_storage = MemoryStorage()
@@ -100,7 +101,7 @@ async def add_server_password(message: types.Message, state: FSMContext):
                       message.from_user.id))
         logging.info(traceback.format_exc())
         await message.answer('%s Can\'t connect to server. Check your IP, login, password and try again' % emoji_warn,
-                             reply_markup=remove_keyboard)
+                             reply_markup=cancel_keyboard)
         await message.answer('Send me your server IP ...', reply_markup=cancel_keyboard)
         await SetupStates.waiting_for_server_address.set()
         return
@@ -115,12 +116,18 @@ async def add_wallet(message: types.Message, state: FSMContext):
     try:
         wallet = json.load(file)
     except Exception:
-        await message.answer('%s Wrong file type. Try again' % emoji_warn, reply_markup=remove_keyboard)
+        await message.answer('%s Wrong file type. Try again' % emoji_warn, reply_markup=cancel_keyboard)
         return
     if 'address' not in wallet:
-        await message.answer('%s Wrong file format. Try again' % emoji_warn, reply_markup=remove_keyboard)
+        await message.answer('%s Wrong file format. Try again' % emoji_warn, reply_markup=cancel_keyboard)
     else:
         eth_address = '0x%s' % wallet['address']
+        check_result = addr_check_helper.check_all(eth_address)
+        if check_result != True:
+            await message.answer(check_result[1], reply_markup=cancel_keyboard)
+            await message.answer('Upload another wallet or try again with this one after fixing issues',
+                                 reply_markup=cancel_keyboard)
+            return
         await state.update_data(wallet=wallet)
         await state.update_data(eth_address=eth_address)
         await message.answer('Got it. Your address: `%s`\nAnd, finally, give me password to your wallet' % eth_address,
@@ -138,7 +145,7 @@ async def add_wallet_password(message: types.Message, state: FSMContext):
         import traceback
         logging.info('Wrong wallet password {%s} for user %s' % (password, message.from_user.id))
         logging.info(traceback.format_exc())
-        await message.answer('%s Wrong wallet password. Try again' % emoji_warn, reply_markup=remove_keyboard)
+        await message.answer('%s Wrong wallet password. Try again' % emoji_warn, reply_markup=cancel_keyboard)
         return
     await message.answer('Great! Let\'s start the installation', reply_markup=remove_keyboard)
     async with asyncssh.connect(setup_data['server_address'], port=22, client_factory=MySSHClient,
